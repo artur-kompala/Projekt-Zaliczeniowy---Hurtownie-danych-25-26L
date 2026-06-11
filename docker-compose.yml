@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  postgres_dwh:
+    image: postgres:15-alpine
+    container_name: postgres_dwh
+    environment:
+      POSTGRES_USER: analytics_user
+      POSTGRES_PASSWORD: secure_password_123
+      POSTGRES_DB: airbnb_dwh
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - airbnb_network
+
+  mlflow_server:
+    image: ghcr.io/mlflow/mlflow:v2.10.2
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns
+    volumes:
+      - mlflow_data:/mlflow
+    networks:
+      - airbnb_network
+
+volumes:
+  postgres_data:
+  mlflow_data:
+
+networks:
+  airbnb_network:
+    driver: bridge
