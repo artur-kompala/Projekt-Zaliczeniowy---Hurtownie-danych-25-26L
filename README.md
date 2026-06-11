@@ -18,4 +18,12 @@ python src/etl/download_data.py
 
 # Krok 2: Automatyczne stworzenie tabel (DDL) oraz transformacja i załadowanie danych
 python src/etl/load_to_dwh.py
+
+pip install mlflow==2.10.2
+
+pip install fastapi uvicorn pydantic
+
+pip install streamlit requests
+
+ uvicorn src.api.main:app --reload
 ```

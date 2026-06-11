@@ -4,19 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="387ef367-b8ef-4d1f-80c9-374b8558bf5c" name="Changes" comment="init">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data/listings.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data/neighbourhoods.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data/neighbourhoods.geojson" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/data/reviews.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/dwh/schema.sql" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/etl/load_to_dwh.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/ml/train.py" afterDir="false" />
+    <list default="true" id="387ef367-b8ef-4d1f-80c9-374b8558bf5c" name="Changes" comment="dodanie skryptów pobierania danych, automatycznego ETL i konfiguracji tabel DWH w Postgresie">
+      <change afterPath="$PROJECT_DIR$/dashboard/app.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/api/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/sample.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/sample.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/ml/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ml/train.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,6 +26,7 @@
     <option name="RECENT_TEMPLATES">
       <list>
         <option value="Dockerfile" />
+        <option value="Python Script" />
       </list>
     </option>
   </component>
@@ -62,16 +57,17 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/megaz/PycharmProjects/JupyterProject1/data&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_MARK_IGNORED_FILES_AS_EXCLUDED": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "master",
+    "last_opened_file_path": "C:/Users/megaz/PycharmProjects/JupyterProject1/data"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\megaz\PycharmProjects\JupyterProject1\data" />
@@ -104,7 +100,15 @@
       <option name="project" value="LOCAL" />
       <updated>1781180329054</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="dodanie skryptów pobierania danych, automatycznego ETL i konfiguracji tabel DWH w Postgresie">
+      <option name="closed" value="true" />
+      <created>1781184769333</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1781184769333</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -120,7 +124,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="init" />
-    <option name="LAST_COMMIT_MESSAGE" value="init" />
+    <MESSAGE value="dodanie skryptów pobierania danych, automatycznego ETL i konfiguracji tabel DWH w Postgresie" />
+    <option name="LAST_COMMIT_MESSAGE" value="dodanie skryptów pobierania danych, automatycznego ETL i konfiguracji tabel DWH w Postgresie" />
   </component>
   <component name="github-copilot-workspace">
     <instructionFileLocations>
