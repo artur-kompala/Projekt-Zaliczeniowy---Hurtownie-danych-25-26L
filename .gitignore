@@ -1,2 +1,9 @@
 data/
 .venv/
+.env
+
+__pycache__/
+
+src/api/requirements.txt
+src/prefect/requirements.txt
+src/dashboard/requirements.txt
