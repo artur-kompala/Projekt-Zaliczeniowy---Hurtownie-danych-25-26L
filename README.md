@@ -27,3 +27,34 @@ pip install streamlit requests
 
  uvicorn src.api.main:app --reload
 ```
+
+# Zaktualizowane uruchamianie projektu
+
+Projekt zawiera plik zmiennych środowiskowych `.env.default`. Aby uruchomić projekt, skopiuj plik `.env.default` do `.env`.
+```console
+cp .env.default .env
+```
+
+Dodatkowo projekt rozwiązuje pliki requirements dynamicznie, czyli najpierw utwórz środowisko `.venv` modułem venv, a następnie zainstaluj do niego wymagane pakiety. Pamiętaj żeby wrócić do głównego katalogu projektu!
+
+```console
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Następnie uruchom skrypt rozwiązywania zależności:
+```console
+python scripts/generate_requirements.txt
+```
+
+## Docker
+W celu uruchomienia dockera wykonaj te kroki:
+```console
+cd docker
+docker compose up
+```
+Polecenie docker compose up, zarówno zbuduje obrazy dockera jak i uruchomi aplikacje. Obecnie w obrazach dockera jest wszystko poza API i dashboardem. Aby uruchomić API, przejdź do katalogu `src/api` i wykonaj polecenie
+```console
+python main.py
+```
