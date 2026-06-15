@@ -1,9 +1,11 @@
 import pandas as pd
 import os
-from fastapi import FastAPI, HTTPException
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 import mlflow
 import mlflow.sklearn
+from mlflow.tracking import MlflowClient
 
 # Inicjalizacja aplikacji
 app = FastAPI(
@@ -15,12 +17,19 @@ app = FastAPI(
 # Konfiguracja MLflow
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-EXPERIMENT_NAME = "Airbnb_NYC_Price_Prediction"
-DATA_PATH = os.getenv("TRAINING_DATA_PATH", "../data/listings_full.csv")  # Ścieżka do danych treningowych
+REGISTRY_NAME = "InsideAirbnbPricePredictionModel"
+DEFAULT_DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "listings_full.csv"
+DATA_PATH = Path(os.getenv("TRAINING_DATA_PATH", str(DEFAULT_DATA_PATH)))
+
+CATEGORICAL_COLS = [
+	"room_type",
+	"property_type",
+	"neighbourhood_group_cleansed",
+	"neighbourhood_cleansed",
+]
 
 # Zmienna globalna przechowująca model w pamięci RAM
 model = None
-
 
 # Struktura danych wejściowych z domyślnymi wartościami (walidacja Pydantic)
 class PropertyData(BaseModel):
@@ -34,60 +43,64 @@ class PropertyData(BaseModel):
     room_type: str = "Private room"  # Opcje: "Entire home/apt", "Private room", "Shared room", "Hotel room"
 
 
-def train_model_and_save(test_size=0.2, random_state=42):
-    """Funkcja pomocnicza do wytrenowania pierwszego modelu, jeśli nie ma żadnych modeli w MLflow."""
-    raise NotImplementedError()
-
-
-def _try_load_latest_model(experiment_id: str):
-    """Próbuje załadować najnowszy poprawny model z kolejnych runów."""
+def _try_load_latest_model(registry_name: str):
+    """Próbuje załadować najnowszą wersję modelu z rejestru modeli."""
     global model
 
-    runs = mlflow.search_runs(
-        experiment_ids=[experiment_id],
-        order_by=["start_time DESC"],
-        max_results=25,
-    )
+    client = MlflowClient()
+    model_versions = client.search_model_versions(f"name='{registry_name}'")
 
-    for _, run in runs.iterrows():
-        run_id = run.run_id
-        model_uri = f"runs:/{run_id}/model"
+    if not model_versions:
+        print(f"⚠️ W rejestrze modeli nie znaleziono żadnych wersji dla: {registry_name}")
+        return False
+
+    latest_versions = sorted(model_versions, key=lambda version: int(version.version), reverse=True)
+
+    for version in latest_versions:
+        model_uri = f"models:/{registry_name}/{version.version}"
         try:
             model = mlflow.pyfunc.load_model(model_uri)
-            print(f"✅ Ładowanie modelu z RUN_ID: {run_id}")
+            print(f"✅ Ładowanie modelu z rejestru: {registry_name}, wersja: {version.version}")
             return True
         except Exception as err:
-            print(f"⚠️ Pomijam RUN_ID {run_id}: brak poprawnego artefaktu modelu ({err})")
+            print(
+                f"⚠️ Pomijam wersję {version.version} w rejestrze {registry_name}: "
+                f"brak poprawnego artefaktu modelu ({err})"
+            )
 
     return False
+
+
+def _get_latest_registered_model_version(registry_name: str):
+    """Zwraca najnowszą wersję modelu z rejestru modeli albo None."""
+    client = MlflowClient()
+    model_versions = client.search_model_versions(f"name='{registry_name}'")
+
+    if not model_versions:
+        return None
+
+    return max(model_versions, key=lambda version: int(version.version))
 
 @app.on_event("startup")
 def load_latest_model():
     """Uruchamia się przy starcie serwera, pobierając najnowszy model z MLflow."""
     global model
-    print("Szukanie najnowszego modelu w eksperymencie MLflow...")
-    experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+    print(f"Szukanie najnowszego modelu w rejestrze MLflow: {REGISTRY_NAME}...")
 
-    if experiment is None:
-        print("Błąd: Nie znaleziono eksperymentu w MLflow.")
-        mlflow.create_experiment(EXPERIMENT_NAME)
-        train_model_and_save()
-        experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
-
-    if not _try_load_latest_model(experiment.experiment_id):
-        print("⚠️ Błąd: Nie znaleziono wytrenowanych modeli. Rozpoczynam trening pierwszego modelu...")
-        train_model_and_save()
-        if not _try_load_latest_model(experiment.experiment_id):
-            raise RuntimeError("Nie udało się załadować modelu po treningu.")
+    if not _try_load_latest_model(REGISTRY_NAME):
+        raise RuntimeError(f"Nie udało się załadować modelu z rejestru: {REGISTRY_NAME}.")
 
 
-@app.get("/predict")
+@app.post("/predict")
 def predict_price(data: PropertyData):
     """Główny endpoint do predykcji cen."""
     if model is None:
         raise HTTPException(status_code=503, detail="Model ML nie jest gotowy.")
 
     # Przekształcenie danych z JSON na format oczekiwany przez model (9 cech)
+
+    df_features = pd.DataFrame(input_data)
+    df_encoded_features = pd.get_dummies(df_features, columns=CATEGORICAL_COLS, dtype=int)
     # Pominęliśmy 'Hotel room', którego nie było w danych treningowych w NYC
     input_data = {
         'minimum_nights': [data.minimum_nights],
@@ -101,7 +114,7 @@ def predict_price(data: PropertyData):
         'room_type_Shared room': [1 if data.room_type == "Shared room" else 0]
     }
 
-    df_features = pd.DataFrame(input_data)
+    
 
     try:
         prediction = model.predict(df_features)
@@ -115,45 +128,55 @@ def predict_price(data: PropertyData):
 # Pobranie danych z serwera
 # NOTE: Może być ciężkie obliczeniowo, ze względu na ilość danych.
 @app.get("/data/listings")
-def get_listings_data():
-    """Endpoint do pobrania danych z MLflow, aby umożliwić użytkownikowi pobranie danych treningowych."""
-    experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+def get_listings_data(limit: int = Query(default=25, ge=1, le=5000)):
+    """Endpoint do pobrania pierwszych N rekordów danych treningowych."""
+    if not DATA_PATH.exists():
+        raise HTTPException(status_code=404, detail=f"Nie znaleziono pliku danych: {DATA_PATH}")
 
-    if experiment is None:
-        raise HTTPException(status_code=404, detail="Nie znaleziono eksperymentu w MLflow.")
+    try:
+        df = pd.read_csv(DATA_PATH)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd odczytu pliku danych: {str(e)}")
 
-    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], order_by=["start_time DESC"], max_results=1)
-
-    if runs.empty:
-        raise HTTPException(status_code=404, detail="Nie znaleziono wytrenowanych modeli.")
-
-    run_id = runs.iloc[0].run_id
-    artifact_uri = f"runs:/{run_id}/data/listings_full.csv"
+    limited_df = df.head(limit).where(pd.notnull(df.head(limit)), None)
+    records = limited_df.to_dict(orient="records")
 
     return {
-        "message": "Dane treningowe można pobrać z MLflow.",
-        "artifact_uri": artifact_uri
+        "count": len(records),
+        "limit": limit,
+        "records": records,
     }
 
 @app.get("/data/listings/geo")
 def get_geo_data():
     """Endpoint do pobrania danych geograficznych z MLflow."""
-    experiment = mlflow.get_experiment_by_name(EXPERIMENT_NAME)
+    latest_version = _get_latest_registered_model_version(REGISTRY_NAME)
 
-    if experiment is None:
-        raise HTTPException(status_code=404, detail="Nie znaleziono eksperymentu w MLflow.")
+    if latest_version is None:
+        raise HTTPException(status_code=404, detail=f"Nie znaleziono modelu w rejestrze: {REGISTRY_NAME}.")
 
-    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], order_by=["start_time DESC"], max_results=1)
-
-    if runs.empty:
-        raise HTTPException(status_code=404, detail="Nie znaleziono wytrenowanych modeli.")
-
-    run_id = runs.iloc[0].run_id
+    run_id = latest_version.run_id
     artifact_uri = f"runs:/{run_id}/data/listings_full.csv"
 
     return {
         "message": "Dane geograficzne można pobrać z MLflow.",
         "artifact_uri": artifact_uri
+    }
+
+@app.get("/model/info")
+def get_current_model_info():
+    """Endpoint do pobrania informacji o aktualnie załadowanym modelu."""
+    latest_version = _get_latest_registered_model_version(REGISTRY_NAME)
+
+    if latest_version is None:
+        raise HTTPException(status_code=404, detail=f"Nie znaleziono modelu w rejestrze: {REGISTRY_NAME}.")
+
+    return {
+        "model_id": latest_version.run_id,
+        "version": latest_version.version,
+        "status": latest_version.status,
+        "start_time": str(latest_version.creation_timestamp),
+        "end_time": str(latest_version.last_updated_timestamp),
     }
 
 def main():
