@@ -110,7 +110,7 @@ services:
       prefect_server:
         condition: service_healthy
       prefect_workflows:
-        condition: service_started
+        condition: service_completed_successfully
   # dashboard:
   #   build:
   #     context: ..
