@@ -1,0 +1,12 @@
+FROM python:3.14.6-slim-trixie
+
+WORKDIR /app
+# Kopiowanie kodu źródłowego
+COPY src/api/ ./
+
+# Instalacja zależności
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 2137
+
+CMD ["python", "-m", "main"]

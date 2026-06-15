@@ -4,32 +4,131 @@ services:
   postgres_dwh:
     image: postgres:15-alpine
     container_name: postgres_dwh
-    environment:
-      POSTGRES_USER: analytics_user
-      POSTGRES_PASSWORD: secure_password_123
-      POSTGRES_DB: airbnb_dwh
+    env_file:
+      - ../.env
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - airbnb_network
+      - internal_network
 
+  prefect_server:
+    image: prefecthq/prefect:sha-7d7cd72-python3.14-conda
+    container_name: prefect_server
+    env_file:
+      - ../.env
+    command:
+      - prefect
+      - server
+      - start
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4200"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:4200/api/health')
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    ports:
+      - "4200:4200"  # Prefect UI
+      - "4201:4201"  # API
+    networks:
+      - internal_network
+      - airbnb_network
   mlflow_server:
-    image: ghcr.io/mlflow/mlflow:v2.10.2
-    container_name: mlflow_server
+    image: ghcr.io/mlflow/mlflow:v3.13.0-full
+    env_file:
+      - ../.env
     ports:
       - "5000:5000"
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts *
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --serve-artifacts 
+      --artifacts-destination /mlflow/mlruns
+      --default-artifact-root mlflow-artifacts:/
     volumes:
       - mlflow_data:/mlflow
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/')
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     networks:
+      - internal_network
       - airbnb_network
+  prefect_workflows:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prefect_workflows
+    container_name: airbnb_prefect_workflows
+    environment:
+      - PREFECT_API_URL=http://prefect_server:4200/api
+    env_file:
+      - ../.env
+    networks:
+      - internal_network
+      - airbnb_network
+    depends_on:
+      mlflow_server:
+        condition: service_healthy
+      prefect_server:
+        condition: service_healthy
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: airbnb_api
+    environment:
+      - PREFECT_API_URL=http://prefect_server:4200/api  
+    env_file:
+      - ../.env
+    ports:
+      - "2137:2137"
+    networks:
+      - internal_network
+      - airbnb_network
+    depends_on:
+      mlflow_server:
+        condition: service_healthy
+      prefect_server:
+        condition: service_healthy
+      prefect_workflows:
+        condition: service_started
+  # dashboard:
+  #   build:
+  #     context: ..
+  #     dockerfile: docker/Dockerfile.dashboard
+  #   container_name: airbnb_dashboard
+  #   env_file:
+  #     - ../.env
+  #   ports:
+  #     - "80:80"
+  #   networks:
+  #     - internal_network
+  #     - airbnb_network
 
 volumes:
   postgres_data:
   mlflow_data:
 
 networks:
+  internal_network:
   airbnb_network:
     driver: bridge
