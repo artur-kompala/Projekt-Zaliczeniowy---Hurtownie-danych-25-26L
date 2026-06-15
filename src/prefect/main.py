@@ -1,3 +1,5 @@
+import os
+
 import requests
 from sklearn.model_selection import train_test_split
 
@@ -16,7 +18,8 @@ from lightgbm import LGBMRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 
-INSIDE_AIRBNB_DATA_LANDING_PAGE = "https://insideairbnb.com/get-the-data.html"
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+INSIDE_AIRBNB_DATA_LANDING_PAGE = os.getenv("INSIDE_AIRBNB_DATA_LANDING_PAGE", "https://insideairbnb.com/get-the-data.html")
 
 TARGET_COL = "price_quote_price_per_night"
 
@@ -46,7 +49,7 @@ PATTERN = re.compile(
     r"(?P<ymd_date>\d{4}-\d{2}-\d{2})/data/listings\.csv\.gz)"
 )
 
-mlflow.set_tracking_uri("http://localhost:5000")
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
 def build_safe_feature_name_map(columns: list[str]) -> dict[str, str]:
     """Metoda do tworzenia bezpiecznych nazw cech, unikając problemów z nazwami cech w MLflow i niektórymi algorytmami ML."""

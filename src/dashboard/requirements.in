@@ -1,0 +1,5 @@
+pandas
+streamlit
+lightgbm
+scikit-learn
+mlflow==3.13

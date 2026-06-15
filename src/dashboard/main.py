@@ -182,7 +182,7 @@ def build_input_row(
 ) -> pd.DataFrame:
 	input_values: dict[str, object] = {}
 
-	st.subheader("Cechy oferty")
+	st.subheader("Cechy mierzalne")
 	col1, col2 = st.columns(2)
 
 	with col1:
@@ -211,7 +211,7 @@ def build_input_row(
 				key=f"{key_prefix}_{col}",
 			)
 
-	st.subheader("Categorical Features")
+	st.subheader("Cechy kategoryczne")
 	cat_col1, cat_col2 = st.columns(2)
 	category_columns = [cat_col1, cat_col2]
 

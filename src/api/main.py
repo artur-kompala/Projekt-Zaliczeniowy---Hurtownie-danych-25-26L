@@ -3,7 +3,6 @@ import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import mlflow
-from ml.train import train_model, clean_data
 import mlflow.sklearn
 
 # Inicjalizacja aplikacji
@@ -37,24 +36,7 @@ class PropertyData(BaseModel):
 
 def train_model_and_save(test_size=0.2, random_state=42):
     """Funkcja pomocnicza do wytrenowania pierwszego modelu, jeśli nie ma żadnych modeli w MLflow."""
-
-    print("Rozpoczęto trening modelu...")
-    
-    # Pobranie danych z MLflow (lub lokalnego pliku CSV)
-    # TODO: Wczytywanie z bazy danych
-    try:
-        df = pd.read_csv(DATA_PATH)
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="Nie znaleziono pliku danych treningowych.")
-
-    mlflow.set_experiment(EXPERIMENT_NAME)
-    model_data = train_model(clean_data(df))
-    print(model_data)
-    # Zapisanie modelu do MLflow
-    with mlflow.start_run():
-        mlflow.log_param("model_type", "LightGBM")
-        mlflow.sklearn.log_model(model_data["model"], name="model")
-        print("✅ Model został wytrenowany i zapisany w MLflow.")
+    raise NotImplementedError()
 
 
 def _try_load_latest_model(experiment_id: str):
