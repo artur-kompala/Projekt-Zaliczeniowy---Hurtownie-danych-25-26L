@@ -20,6 +20,18 @@ from sklearn.metrics import mean_absolute_error, r2_score
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 INSIDE_AIRBNB_DATA_LANDING_PAGE = os.getenv("INSIDE_AIRBNB_DATA_LANDING_PAGE", "https://insideairbnb.com/get-the-data.html")
+POSTGRES_USER = os.getenv("POSTGRES_USER", os.getenv("DB_USER", "analytics_user"))
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", os.getenv("DB_PASSWORD", "secure_password_123"))
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", os.getenv("DB_HOST", "127.0.0.1"))
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", os.getenv("DB_PORT", "5432"))
+POSTGRES_DB = os.getenv("POSTGRES_DB", os.getenv("DB_NAME", "airbnb_dwh"))
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+)
+
+RAW_DATA_TABLE = os.getenv("RAW_DATA_TABLE", "raw_data")
+CLEAN_DATA_TABLE = os.getenv("CLEAN_DATA_TABLE", "clean_data")
 
 TARGET_COL = "price_quote_price_per_night"
 
@@ -50,6 +62,10 @@ PATTERN = re.compile(
 )
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
+
+def get_db_engine():
+    return create_engine(DATABASE_URL)
 
 def build_safe_feature_name_map(columns: list[str]) -> dict[str, str]:
     """Metoda do tworzenia bezpiecznych nazw cech, unikając problemów z nazwami cech w MLflow i niektórymi algorytmami ML."""
@@ -133,7 +149,11 @@ def scrape_listings_url_and_date(main_url: str) -> tuple[str, str]:
 @task
 def save_raw_data_to_db(df: pd.DataFrame):
     """Zadanie do zapisywania surowych danych do bazy danych."""
-    pass
+    if df.empty:
+        raise ValueError("Nie można zapisać pustego zbioru surowych danych do bazy.")
+
+    with get_db_engine().begin() as connection:
+        df.to_sql(RAW_DATA_TABLE, connection, if_exists="replace", index=False, method="multi")
 
 @task
 def clean_and_preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -166,12 +186,24 @@ def clean_and_preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
 @task
 def save_clean_data_to_db(df_clean: pd.DataFrame):
     """Zadanie do zapisywania przetworzonych danych do bazy danych."""
-    pass
+    if df_clean.empty:
+        raise ValueError("Nie można zapisać pustego zbioru przetworzonych danych do bazy.")
+
+    df_to_save = df_clean.reset_index()
+
+    with get_db_engine().begin() as connection:
+        df_to_save.to_sql(CLEAN_DATA_TABLE, connection, if_exists="replace", index=False, method="multi")
 
 @task
 def get_clean_data_from_db() -> pd.DataFrame:
     """Zadanie do pobierania przetworzonych danych z bazy danych."""
-    pass
+    with get_db_engine().connect() as connection:
+        df_clean = pd.read_sql_table(CLEAN_DATA_TABLE, connection)
+
+    if "id" in df_clean.columns:
+        df_clean = df_clean.set_index("id")
+
+    return df_clean
 
 @task
 def train_model(X_train, X_test, y_train, y_test, n_estimators=100, raw_feature_columns=[], feature_name_map=[]) -> LGBMRegressor:
@@ -238,24 +270,28 @@ def split_data(df: pd.DataFrame):
     return X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map
 
 @task
-def save_model_to_mlflow(model):
+def save_model_to_mlflow(training_result):
     """Zadanie do zapisywania modelu do MLflow."""
-    with mlflow.start_run():
+    model = training_result["model"]
+
+    with mlflow.start_run() as run:
+        mlflow.log_params(training_result["params"])
+        mlflow.log_metrics(training_result["metrics"])
         mlflow.sklearn.log_model(model, "model")
-        mlflow.register_model("runs:/{}/model".format(mlflow.active_run().info.run_id), "InsideAirbnbPricePredictionModel")
+        mlflow.register_model(f"runs:/{run.info.run_id}/model", "InsideAirbnbPricePredictionModel")
 
 @flow(name="Inside AirBnB New York Price Prediction Flow")
 def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
     link, date = scrape_listings_url_and_date(INSIDE_AIRBNB_DATA_LANDING_PAGE)
     df_raw = fetch_data_from_source(link)
-    save_raw_data_to_db(df_raw)
+    save_raw_data_to_db.submit(df_raw)
     df_clean = clean_and_preprocess_data(df_raw)
-    save_clean_data_to_db(df_clean)
+    save_clean_data_to_db.submit(df_clean)
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
-    save_model_to_mlflow(model)
+    save_model_to_mlflow.submit(model)
 
 @flow(name="Inside AirBnB New York Price Prediction Retraining Flow")
 def airbnb_new_york_price_prediction_retraining_flow():

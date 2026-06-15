@@ -4,3 +4,4 @@ sqlalchemy
 scikit-learn
 lightgbm
 prefect
+psycopg2-binary
