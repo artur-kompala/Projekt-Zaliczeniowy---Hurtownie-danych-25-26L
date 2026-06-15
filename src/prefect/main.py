@@ -8,16 +8,71 @@ import io
 import gzip
 import mlflow
 from mlflow import log_metric, log_param, log_artifact
+import re
+import pandas as pd
+from sqlalchemy import create_engine
+import mlflow
+from lightgbm import LGBMRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, r2_score
 
 INSIDE_AIRBNB_DATA_LANDING_PAGE = "https://insideairbnb.com/get-the-data.html"
+
+TARGET_COL = "price_quote_price_per_night"
+
+CATEGORICAL_COLS = [
+	"room_type",
+	"property_type",
+	"neighbourhood_group_cleansed",
+	"neighbourhood_cleansed",
+]
+
+NUMERIC_COLS = [
+	"host_listings_count",
+	"accommodates",
+	"bathrooms",
+	"bedrooms",
+	"minimum_nights",
+	"maximum_nights",
+	"availability_365",
+	"number_of_reviews",
+	"number_of_reviews_ltm",
+	"review_scores_rating",
+	"reviews_per_month",
+]
 
 PATTERN = re.compile(
     r"(https://data\.insideairbnb\.com/united-states/ny/new-york-city/"
     r"(?P<ymd_date>\d{4}-\d{2}-\d{2})/data/listings\.csv\.gz)"
 )
 
+mlflow.set_tracking_uri("http://localhost:5000")
+
+def build_safe_feature_name_map(columns: list[str]) -> dict[str, str]:
+    """Metoda do tworzenia bezpiecznych nazw cech, unikając problemów z nazwami cech w MLflow i niektórymi algorytmami ML."""
+    safe_names: list[str] = []
+    used_names: set[str] = set()
+
+    for col in columns:
+        safe = re.sub(r"[^0-9a-zA-Z_]", "_", str(col))
+        safe = re.sub(r"_+", "_", safe).strip("_")
+        if not safe:
+            safe = "feature"
+
+        candidate = safe
+        counter = 1
+        while candidate in used_names:
+            candidate = f"{safe}_{counter}"
+            counter += 1
+
+        used_names.add(candidate)
+        safe_names.append(candidate)
+
+    return dict(zip(columns, safe_names))
+
+
 @task
-def get_data_from_link(link_to_gzip_csv: str) -> pd.DataFrame:
+def fetch_data_from_source(link_to_gzip_csv: str) -> pd.DataFrame:
     """Zadanie do pobierania danych z linku Inside Airbnb."""
     if not link_to_gzip_csv or not isinstance(link_to_gzip_csv, str):
         raise ValueError("Nieprawidłowy link do archiwum gzip CSV.")
@@ -55,8 +110,13 @@ def get_data_from_link(link_to_gzip_csv: str) -> pd.DataFrame:
     return df
 
 @task
-def scrape_listings_url_and_date(text: str) -> tuple[str, str]:
+def scrape_listings_url_and_date(main_url: str) -> tuple[str, str]:
     """Funkcja do znalezienia linku do danych i daty z tekstu strony Inside Airbnb."""
+    
+    response = requests.get(main_url, timeout=10)
+    response.raise_for_status()
+    text = response.text
+
     match = PATTERN.search(text)
     if not match:
         raise ValueError(
@@ -68,39 +128,40 @@ def scrape_listings_url_and_date(text: str) -> tuple[str, str]:
     return found_url, ymd_date
 
 @task
-def fetch_raw_data_from_source():
-    """Funkcja do pobierania surowych danych z bazy danych. Używana w Prefect do zautomatyzowania procesu."""
-    engine = create_engine(DATABASE_URL)
-    query = """
-        SELECT 
-            f.price,
-            f.minimum_nights,
-            d.room_type,
-            d.accommodates,
-            d.bathrooms,
-            d.bedrooms,
-            d.beds,
-            d.latitude,
-            d.longitude
-        FROM fact_calendar f
-        JOIN dim_listing d ON f.listing_id = d.listing_id
-        LIMIT 100000;
-    """
-    df = pd.read_sql(query, engine)
-    return df
-
-@task
-def save_raw_data_to_db():
+def save_raw_data_to_db(df: pd.DataFrame):
     """Zadanie do zapisywania surowych danych do bazy danych."""
     pass
 
 @task
 def clean_and_preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Zadanie czyszczenia i wstępnego przetwarzania danych surowych."""
-    pass
+    """Zadanie czyszczenia i wstępnego przetwarzania danych."""
+    # Przykładowe przetwarzanie danych
+    df["bathrooms"] = pd.to_numeric(
+        df["bathrooms_text"].astype(str).str.extract(r"(\d+(?:\.\d+)?)", expand=False),
+        errors="coerce",
+    )
+
+    columns_to_keep = [
+        "id",
+        *NUMERIC_COLS,
+        *CATEGORICAL_COLS,
+        TARGET_COL,
+    ]
+
+    df_clean = df[columns_to_keep].copy().set_index("id")
+    df_clean = df_clean.dropna(subset=[TARGET_COL])
+
+    for col in NUMERIC_COLS:
+        df_clean[col] = pd.to_numeric(df_clean[col], errors="coerce")
+        df_clean[col] = df_clean[col].fillna(df_clean[col].median())
+
+    for col in CATEGORICAL_COLS:
+        df_clean[col] = df_clean[col].fillna("Unknown").astype(str)
+        
+    return df_clean
 
 @task
-def save_clean_data_to_db():
+def save_clean_data_to_db(df_clean: pd.DataFrame):
     """Zadanie do zapisywania przetworzonych danych do bazy danych."""
     pass
 
@@ -110,66 +171,87 @@ def get_clean_data_from_db() -> pd.DataFrame:
     pass
 
 @task
-def train_model(X_train, X_test, y_train, y_test, n_estimators=100):
-    model = RandomForestRegressor(
+def train_model(X_train, X_test, y_train, y_test, n_estimators=100, raw_feature_columns=[], feature_name_map=[]) -> LGBMRegressor:
+    """Funkcja trenująca model LightGBM na danych z bazy danych i logująca go do MLflow."""
+
+    model = LGBMRegressor(
         n_estimators=n_estimators,
-        random_state=42
+    )
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+    metrics = {
+        "mae": mean_absolute_error(y_test, y_pred),
+        "r2": r2_score(y_test, y_pred),
+    }
+
+    feature_importance = (
+        pd.DataFrame(
+            {
+                "feature": raw_feature_columns,
+                "importance": model.feature_importances_,
+            }
+        )
+        .sort_values("importance", ascending=False)
+        .reset_index(drop=True)
     )
 
-    with mlflow.start_run():
-
-        model.fit(
-            X_train,
-            y_train
-        )
-
-        predictions = model.predict(
-            X_test
-        )
-
-        mse = mean_squared_error(
-            y_test,
-            predictions
-        )
-
-        mlflow.log_param(
-            "n_estimators",
-            n_estimators
-        )
-
-        mlflow.log_metric(
-            "mse",
-            mse
-        )
-
-        print("MSE:", mse)
-
-    return model
+    return {
+        "model": model,
+        "model_columns": raw_feature_columns,
+        "feature_name_map": feature_name_map,
+        "metrics": metrics,
+        "params": {
+            "n_estimators": n_estimators,
+            "learning_rate": model.learning_rate,
+            "num_leaves": model.num_leaves,
+            "max_depth": model.max_depth,
+            "min_child_samples": model.min_child_samples,
+            "subsample": model.subsample,
+            "colsample_bytree": model.colsample_bytree,
+            "random_state": model.random_state,
+        },
+        "feature_importance": feature_importance,
+    }
 
 @task
 def split_data(df: pd.DataFrame):
     """Funkcja do podziału danych na zbiór treningowy i testowy. Używana w Prefect do zautomatyzowania procesu."""
-    X = df.drop(columns=['price'])
-    y = df['price']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    return X_train, X_test, y_train, y_test
+    encoded_df = pd.get_dummies(df, columns=CATEGORICAL_COLS, dtype=int)
+
+    X = encoded_df.drop(columns=[TARGET_COL])
+    y = encoded_df[TARGET_COL]
+
+    raw_feature_columns = X.columns.tolist()
+    feature_name_map = build_safe_feature_name_map(raw_feature_columns)
+    X = X.rename(columns=feature_name_map)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+    )
+
+    return X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map
 
 @task
 def save_model_to_mlflow(model):
     """Zadanie do zapisywania modelu do MLflow."""
-    mlflow.sklearn.log_model(model, "model")
+    with mlflow.start_run():
+        mlflow.sklearn.log_model(model, "model")
+        mlflow.register_model("runs:/{}/model".format(mlflow.active_run().info.run_id), "InsideAirbnbPricePredictionModel")
 
 @flow(name="Inside AirBnB New York Price Prediction Flow")
 def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
-    link, date = scrape_listings_url_and_date()
-    df_raw = get_data_from_link(link)
+    link, date = scrape_listings_url_and_date(INSIDE_AIRBNB_DATA_LANDING_PAGE)
+    df_raw = fetch_data_from_source(link)
     save_raw_data_to_db(df_raw)
     df_clean = clean_and_preprocess_data(df_raw)
     save_clean_data_to_db(df_clean)
 
-    X_train, X_test, y_train, y_test = split_data(df_clean)
-    model = train_model(X_train, X_test, y_train, y_test)
+    X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
+    model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
     save_model_to_mlflow(model)
 
 @flow(name="Inside AirBnB New York Price Prediction Retraining Flow")
@@ -179,5 +261,10 @@ def airbnb_new_york_price_prediction_retraining_flow():
     dostępne w bazie danych."""
 
     df_clean = get_clean_data_from_db()
-    X_train, X_test, y_train, y_test = split_data(df_clean)
-    model = train_model(X_train, X_test, y_train, y_test)
+    X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
+    model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
+    save_model_to_mlflow(model)
+
+
+print("Uruchamianie głównego przepływu Prefect do predykcji cen Airbnb w Nowym Jorku...")
+airbnb_new_york_price_prediction_full_pipeline()
