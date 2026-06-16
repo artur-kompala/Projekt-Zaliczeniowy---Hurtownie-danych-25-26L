@@ -139,14 +139,22 @@ def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
 		)
 
 	return {
-		"minimum_nights": int(minimum_nights),
-		"accommodates": int(accommodates),
-		"bathrooms": float(bathrooms),
-		"bedrooms": int(bedrooms),
-		"beds": int(beds),
-		"latitude": float(latitude),
-		"longitude": float(longitude),
-		"room_type": room_type,
+		"room_type" : str("Private room"),
+		"property_type" : str("Entire rental unit"),
+		"neighbourhood_group_cleansed" : str("Manhattan"),
+		"neighbourhood_cleansed" : str("Williamsburg"),
+
+		"host_listings_count" : int(1),
+		"accommodates" : int(accommodates),
+		"bathrooms" : float(bathrooms),
+		"bedrooms" : int(bedrooms),
+		"minimum_nights" : int(minimum_nights),
+		"maximum_nights" : int(365),
+		"availability_365" : int(365),
+		"number_of_reviews" : int(0),
+		"number_of_reviews_ltm" : int(0),
+		"review_scores_rating" : float(0.0),
+		"reviews_per_month" : float(0.0)
 	}
 
 

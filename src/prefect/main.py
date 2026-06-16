@@ -1,6 +1,8 @@
 import os
 
 import requests
+from sklearn.compose import ColumnTransformer
+from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
 
 from prefect import task, flow
@@ -12,6 +14,8 @@ import mlflow
 from mlflow import log_metric, log_param, log_artifact
 import re
 import pandas as pd
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
 from sqlalchemy import create_engine
 import mlflow
 from lightgbm import LGBMRegressor
@@ -209,53 +213,62 @@ def get_clean_data_from_db() -> pd.DataFrame:
 def train_model(X_train, X_test, y_train, y_test, n_estimators=100, raw_feature_columns=[], feature_name_map=[]) -> LGBMRegressor:
     """Funkcja trenująca model LightGBM na danych z bazy danych i logująca go do MLflow."""
 
-    model = LGBMRegressor(
-        n_estimators=n_estimators,
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("ohe", OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_COLS),
+        ],
+        remainder="passthrough",
     )
-    model.fit(X_train, y_train)
 
-    y_pred = model.predict(X_test)
+    pipeline = Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            ("model", LGBMRegressor(n_estimators=n_estimators)),
+        ]
+    )
+
+    pipeline.fit(X_train, y_train)
+
+    y_pred = pipeline.predict(X_test)
     metrics = {
         "mae": mean_absolute_error(y_test, y_pred),
         "r2": r2_score(y_test, y_pred),
     }
 
-    feature_importance = (
-        pd.DataFrame(
-            {
-                "feature": raw_feature_columns,
-                "importance": model.feature_importances_,
-            }
-        )
-        .sort_values("importance", ascending=False)
-        .reset_index(drop=True)
-    )
+    # feature_importance = (
+    #     pd.DataFrame(
+    #         {
+    #             "feature": raw_feature_columns,
+    #             "importance": pipeline.named_steps["model"].feature_importances_,
+    #         }
+    #     )
+    #     .sort_values("importance", ascending=False)
+    #     .reset_index(drop=True)
+    # )
 
     return {
-        "model": model,
+        "model": pipeline,
         "model_columns": raw_feature_columns,
         "feature_name_map": feature_name_map,
         "metrics": metrics,
         "params": {
             "n_estimators": n_estimators,
-            "learning_rate": model.learning_rate,
-            "num_leaves": model.num_leaves,
-            "max_depth": model.max_depth,
-            "min_child_samples": model.min_child_samples,
-            "subsample": model.subsample,
-            "colsample_bytree": model.colsample_bytree,
-            "random_state": model.random_state,
+            "learning_rate": pipeline.named_steps["model"].learning_rate,
+            "num_leaves": pipeline.named_steps["model"].num_leaves,
+            "max_depth": pipeline.named_steps["model"].max_depth,
+            "min_child_samples": pipeline.named_steps["model"].min_child_samples,
+            "subsample": pipeline.named_steps["model"].subsample,
+            "colsample_bytree": pipeline.named_steps["model"].colsample_bytree,
+            "random_state": pipeline.named_steps["model"].random_state,
         },
-        "feature_importance": feature_importance,
+        "feature_importance": None,
     }
 
 @task
 def split_data(df: pd.DataFrame):
     """Funkcja do podziału danych na zbiór treningowy i testowy. Używana w Prefect do zautomatyzowania procesu."""
-    encoded_df = pd.get_dummies(df, columns=CATEGORICAL_COLS, dtype=int)
-
-    X = encoded_df.drop(columns=[TARGET_COL])
-    y = encoded_df[TARGET_COL]
+    X = df.drop(columns=[TARGET_COL])
+    y = df[TARGET_COL]
 
     raw_feature_columns = X.columns.tolist()
     feature_name_map = build_safe_feature_name_map(raw_feature_columns)
@@ -285,9 +298,9 @@ def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
     link, date = scrape_listings_url_and_date(INSIDE_AIRBNB_DATA_LANDING_PAGE)
     df_raw = fetch_data_from_source(link)
-    save_raw_data_to_db.submit(df_raw)
+    #save_raw_data_to_db.submit(df_raw)
     df_clean = clean_and_preprocess_data(df_raw)
-    save_clean_data_to_db.submit(df_clean)
+    #save_clean_data_to_db.submit(df_clean)
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)

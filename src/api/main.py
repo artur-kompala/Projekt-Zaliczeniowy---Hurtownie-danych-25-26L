@@ -21,6 +21,20 @@ REGISTRY_NAME = "InsideAirbnbPricePredictionModel"
 DEFAULT_DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "listings_full.csv"
 DATA_PATH = Path(os.getenv("TRAINING_DATA_PATH", str(DEFAULT_DATA_PATH)))
 
+NUMERIC_COLS = [
+	"host_listings_count",
+	"accommodates",
+	"bathrooms",
+	"bedrooms",
+	"minimum_nights",
+	"maximum_nights",
+	"availability_365",
+	"number_of_reviews",
+	"number_of_reviews_ltm",
+	"review_scores_rating",
+	"reviews_per_month",
+]
+
 CATEGORICAL_COLS = [
 	"room_type",
 	"property_type",
@@ -99,22 +113,28 @@ def predict_price(data: PropertyData):
 
     # Przekształcenie danych z JSON na format oczekiwany przez model (9 cech)
 
-    df_features = pd.DataFrame(input_data)
-    df_encoded_features = pd.get_dummies(df_features, columns=CATEGORICAL_COLS, dtype=int)
+    #df_encoded_features = pd.get_dummies(df_features, columns=CATEGORICAL_COLS, dtype=int)
     # Pominęliśmy 'Hotel room', którego nie było w danych treningowych w NYC
     input_data = {
-        'minimum_nights': [data.minimum_nights],
-        'accommodates': [data.accommodates],
-        'bathrooms': [data.bathrooms],
-        'bedrooms': [data.bedrooms],
-        'beds': [data.beds],
-        'latitude': [data.latitude],
-        'longitude': [data.longitude],
-        'room_type_Private room': [1 if data.room_type == "Private room" else 0],
-        'room_type_Shared room': [1 if data.room_type == "Shared room" else 0]
+        "room_type" : ["Private room"],
+		"property_type" : ["Entire rental unit"],
+		"neighbourhood_group_cleansed" : ["Manhattan"],
+		"neighbourhood_cleansed" : ["Williamsburg"],
+		"host_listings_count" : [1],
+		"accommodates" : [data.accommodates],
+		"bathrooms" : [data.bathrooms],
+		"bedrooms" : [data.bedrooms],
+		"minimum_nights" : [data.minimum_nights],
+		"maximum_nights" : [365],
+		"availability_365" : [365],
+		"number_of_reviews" : [0],
+		"number_of_reviews_ltm" : [0],
+		"review_scores_rating" : [0.0],
+		"reviews_per_month" : [0.0]
+
     }
 
-    
+    df_features = pd.DataFrame(input_data)
 
     try:
         prediction = model.predict(df_features)
