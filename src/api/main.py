@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import mlflow
 import mlflow.sklearn
 from mlflow.tracking import MlflowClient
+from sqlalchemy import create_engine
 
 # Inicjalizacja aplikacji
 app = FastAPI(
@@ -14,12 +15,20 @@ app = FastAPI(
     version="1.0"
 )
 
-# Konfiguracja MLflow
+# Konfiguracja MLflowWW
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 REGISTRY_NAME = "InsideAirbnbPricePredictionModel"
-DEFAULT_DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "listings_full.csv"
-DATA_PATH = Path(os.getenv("TRAINING_DATA_PATH", str(DEFAULT_DATA_PATH)))
+
+POSTGRES_USER = os.getenv("POSTGRES_USER", os.getenv("DB_USER", "analytics_user"))
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", os.getenv("DB_PASSWORD", "secure_password_123"))
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", os.getenv("DB_HOST", "127.0.0.1"))
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", os.getenv("DB_PORT", "5432"))
+POSTGRES_DB = os.getenv("POSTGRES_DB", os.getenv("DB_NAME", "airbnb_dwh"))
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+)
 
 NUMERIC_COLS = [
 	"host_listings_count",
@@ -56,9 +65,11 @@ class PropertyData(BaseModel):
     longitude: float = -74.0060
     room_type: str = "Private room"  # Opcje: "Entire home/apt", "Private room", "Shared room", "Hotel room"
 
+def get_db_engine():
+    return create_engine(DATABASE_URL)
 
 def _try_load_latest_model(registry_name: str):
-    """Próbuje załadować najnowszą wersję modelu z rejestru modeli."""
+    """Próbuje załadować najnowszą wersję moWWdelu z rejestru modeli."""
     global model
 
     client = MlflowClient()
@@ -148,21 +159,15 @@ def predict_price(data: PropertyData):
 # Pobranie danych z serwera
 # NOTE: Może być ciężkie obliczeniowo, ze względu na ilość danych.
 @app.get("/data/listings")
-def get_listings_data(limit: int = Query(default=25, ge=1, le=5000)):
-    """Endpoint do pobrania pierwszych N rekordów danych treningowych."""
-    if not DATA_PATH.exists():
-        raise HTTPException(status_code=404, detail=f"Nie znaleziono pliku danych: {DATA_PATH}")
-
-    try:
-        df = pd.read_csv(DATA_PATH)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Błąd odczytu pliku danych: {str(e)}")
-
-    limited_df = df.head(limit).where(pd.notnull(df.head(limit)), None)
-    records = limited_df.to_dict(orient="records")
+def get_listings_data(offset: int = Query(default=0, ge=0), limit: int = Query(default=25, ge=1, le=100)):
+    """Endpoint do pobrania pierwszych N rekordów danych treningowych, uwzględniając offset."""
+    with get_db_engine().begin() as connection:
+        df = pd.read_sql("SELECT * FROM clean_data LIMIT %s OFFSET %s", con=connection, params=(limit, offset))
+        records = df.to_dict(orient="records")
 
     return {
         "count": len(records),
+        "offset": offset,
         "limit": limit,
         "records": records,
     }

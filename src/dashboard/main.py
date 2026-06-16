@@ -169,7 +169,7 @@ def render_dataset_browser(df_clean: pd.DataFrame) -> None:
 	st.slider(
 		"Liczba rekordów do pobrania z serwera",
 		min_value=1,
-		max_value=2000,
+		max_value=100,
 		value=int(st.session_state["server_limit"]),
 		step=1,
 		key="server_limit",
@@ -198,7 +198,7 @@ def render_dataset_browser(df_clean: pd.DataFrame) -> None:
 		return
 
 	max_rows = max(len(active_df), 1)
-	row_limit = st.slider("Liczba wyświetlanych wierszy", min_value=1, max_value=max_rows, value=min(25, max_rows), step=1)
+	row_limit = 100
 
 	view_df = active_df[selected_columns]
 

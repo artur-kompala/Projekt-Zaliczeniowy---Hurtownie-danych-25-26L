@@ -17,7 +17,7 @@ class ApiMiddleware:
 
         return response.json()
 
-    def get_listings_data(self, limit: int | None = None) -> dict:
+    def get_listings_data(self, offset: int = 0, limit: int | None = None) -> dict:
         """
         Return value:
         {
@@ -26,7 +26,7 @@ class ApiMiddleware:
           "records": list[dict]
         }
         """
-        params = {"limit": int(limit)} if limit is not None else None
+        params = {"offset": offset, "limit": int(limit)} if limit is not None else {"offset": offset}
         response = requests.get(f"{self.api_url}/data/listings", params=params, timeout=20)
         return self._validate_json_response(response, "Nie udało się pobrać danych o ofertach!")
 

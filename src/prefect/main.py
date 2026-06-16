@@ -1,5 +1,6 @@
 import os
 
+from oauthlib.uri_validate import query
 import requests
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import ColumnTransformer
@@ -292,6 +293,7 @@ def save_model_to_mlflow(training_result):
     with mlflow.start_run() as run:
         mlflow.log_params(training_result["params"])
         mlflow.log_metrics(training_result["metrics"])
+        mlflow.log_input(training_result["dataset_metadata"], "dataset_metadata.json")
         mlflow.sklearn.log_model(model, "model")
         mlflow.register_model(f"runs:/{run.info.run_id}/model", "InsideAirbnbPricePredictionModel")
 
