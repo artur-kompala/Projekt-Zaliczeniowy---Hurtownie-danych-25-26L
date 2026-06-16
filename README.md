@@ -1,60 +1,35 @@
-## Wymagania systemowe i uruchomienie
+# Dashboard AirBnb
+Aplikacja składa się z dwóch komponentów:
+- Przeglądu danych
+    - Prezentuje statystyki danych
+    - Użytkownik może zmieniać liczbę rekordów wyświetlanych w oknie podglądu danych
+    - Wsparcie dla paginacji, ułatwiające użytkownikowi przeglądanie tak dużego zbioru danych jak AirBnB
+- Predykcji ceny za noc wynajmowanego podmiotu
+    - Użytkownik uzupełnia cechy dotyczące jego samego i podmiotu, który chce wynajmować
+    - Na podstawie tych cech wyliczana jest sugerowana cena za każdą noc wynajmu
 
-Aby uruchomić projekt na czystym środowisku, należy wykonać poniższe kroki konfiguracji.
+# Architektura
+```mermaid
+graph LR;
+      A[Dashboard]-->|Żądanie HTTP|B[API];
+      B-->|Odpowiedź HTTP|A;
+      C[Mlflow]-->|Pobranie najnoweszego modelu|B;
+      D[Prefect]-->|Zapisanie modelu i informacji o nim|D;
+      D-->|Zapytanie SQL|E[(Baza danych)]
+      E-->|Wynik zapytania|D
+      B-->|Zapytanie SQL|E
+      E-->|Wynik zapytania|B
+```
 
-### 1. Przygotowanie środowiska wirtualnego Python
-Wymagane jest posiadanie zainstalowanego środowiska Python (zalecany 3.11+). W katalogu głównym projektu uruchom:
+# Deploy
 
-# Instalacja wymaganych bibliotek
+Podstawowym sposóbem dystrybucji aplikacji jest plik `docker-compose.yml` w katalogu `docker`. Po wejściu do katalogu `docker`, wystarczy uruchomić:
 ```bash
-pip install pandas sqlalchemy psycopg2-binary
-```
-### 3. Uruchomienie potoku ETL
-Wystarczy uruchomić poniższe polecenia, aby system sam pobrał dane i w pełni przygotował hurtownię danych:
-
-```bash
-# Krok 1: Automatyczne pobranie surowych danych z Inside Airbnb NYC
-python src/etl/download_data.py
-
-# Krok 2: Automatyczne stworzenie tabel (DDL) oraz transformacja i załadowanie danych
-python src/etl/load_to_dwh.py
-
-pip install mlflow==2.10.2
-
-pip install fastapi uvicorn pydantic
-
-pip install streamlit requests
-
- uvicorn src.api.main:app --reload
-```
-
-# Zaktualizowane uruchamianie projektu
-
-Projekt zawiera plik zmiennych środowiskowych `.env.default`. Aby uruchomić projekt, skopiuj plik `.env.default` do `.env`.
-```console
-cp .env.default .env
-```
-
-Dodatkowo projekt rozwiązuje pliki requirements dynamicznie, czyli najpierw utwórz środowisko `.venv` modułem venv, a następnie zainstaluj do niego wymagane pakiety. Pamiętaj żeby wrócić do głównego katalogu projektu!
-
-```console
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Następnie uruchom skrypt rozwiązywania zależności:
-```console
-python scripts/generate_requirements.txt
-```
-
-## Docker
-W celu uruchomienia dockera wykonaj te kroki:
-```console
-cd docker
 docker compose up
 ```
-Polecenie docker compose up, zarówno zbuduje obrazy dockera jak i uruchomi aplikacje. Obecnie w obrazach dockera jest wszystko poza API i dashboardem. Aby uruchomić API, przejdź do katalogu `src/api` i wykonaj polecenie
-```console
-python main.py
-```
+Po wykonaniu polecenia i poczekaniu paru minut, wszystkie komponenty powinny być aktywne.
+- Dashboard: domyślnie na porcie 80
+- API: domyślnie na porcie 2137
+- Baza danych: domyślnie na porcie 5432
+- Serwer Prefect(+workflow): domyślnie na porcie 4200
+- Serwer Mlflow: domyślnie na porcie 5000
