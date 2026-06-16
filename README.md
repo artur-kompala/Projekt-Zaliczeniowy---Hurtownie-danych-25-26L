@@ -14,7 +14,7 @@ graph LR;
       A[Dashboard]-->|Żądanie HTTP|B[API];
       B-->|Odpowiedź HTTP|A;
       C[Mlflow]-->|Pobranie najnoweszego modelu|B;
-      D[Prefect]-->|Zapisanie modelu i informacji o nim|D;
+      D[Prefect]-->|Zapisanie modelu i informacji o nim|C;
       D-->|Zapytanie SQL|E[(Baza danych)]
       E-->|Wynik zapytania|D
       B-->|Zapytanie SQL|E
