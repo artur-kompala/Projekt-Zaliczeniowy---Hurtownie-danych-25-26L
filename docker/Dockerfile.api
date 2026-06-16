@@ -1,5 +1,12 @@
 FROM python:3.14.6-slim-trixie
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Wymagana przez LightGBM
+RUN apt-get install libgomp1 -y
+
 WORKDIR /app
 # Kopiowanie kodu źródłowego
 COPY src/api/ ./

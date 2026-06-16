@@ -96,7 +96,17 @@ services:
       dockerfile: docker/Dockerfile.api
     container_name: airbnb_api
     environment:
-      - PREFECT_API_URL=http://prefect_server:4200/api  
+      - PREFECT_API_URL=http://prefect_server:4200/api
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:2137/health')
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
     env_file:
       - ../.env
     ports:
@@ -111,18 +121,21 @@ services:
         condition: service_healthy
       prefect_workflows:
         condition: service_completed_successfully
-  # dashboard:
-  #   build:
-  #     context: ..
-  #     dockerfile: docker/Dockerfile.dashboard
-  #   container_name: airbnb_dashboard
-  #   env_file:
-  #     - ../.env
-  #   ports:
-  #     - "80:80"
-  #   networks:
-  #     - internal_network
-  #     - airbnb_network
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: airbnb_dashboard
+    env_file:
+      - ../.env
+    ports:
+      - "80:80"
+    networks:
+      - internal_network
+      - airbnb_network
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:
