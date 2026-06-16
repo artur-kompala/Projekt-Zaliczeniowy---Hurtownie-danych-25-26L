@@ -7,6 +7,7 @@ import requests
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import train_test_split
+from requests.exceptions import RequestException
 
 from prefect import task, flow
 import pandas as pd
@@ -142,8 +143,13 @@ def fetch_data_from_source(link_to_gzip_csv: str) -> pd.DataFrame:
 def scrape_listings_url_and_date(main_url: str) -> tuple[str, str]:
     """Funkcja do znalezienia linku do danych i daty z tekstu strony Inside Airbnb."""
     
-    response = requests.get(main_url, timeout=10)
-    response.raise_for_status()
+    try:
+        response = requests.get(main_url, timeout=10)
+        response.raise_for_status()
+    except(requests.RequestException):
+        # FIXME: Wykorzystanie wyjątków do kontroli przepływu programu to zła praktyka, ale to najprostsze co mogę teraz zrobić.
+        return (None, None)
+
     text = response.text
 
     match = PATTERN.search(text)
@@ -340,18 +346,22 @@ def save_last_fetch_date_to_db(fetch_date: str) -> None:
 def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
     link, date = scrape_listings_url_and_date(INSIDE_AIRBNB_DATA_LANDING_PAGE)
-    last_fetch_date = get_last_saved_date_from_db()
-
-    if last_fetch_date and date <= last_fetch_date:
-        print(f"Dane z dnia {date} są już zapisane w bazie danych. Pomijam pobieranie i przetwarzanie oraz pobieram dane z bazy.")
+    if link is None or date is None:
+        print("Nie udało się znaleźć linku do danych lub daty na stronie Inside Airbnb. Zostaną wykorzystane dane z bazy danych, jeśli są dostępne.")
         df_clean = get_clean_data_from_db()
-    else:
-        print(f"Pobieranie danych z dnia {date} ze źródła: {link}")
-        df_raw = fetch_data_from_source(link)
-        save_raw_data_to_db.submit(df_raw)
-        df_clean = clean_and_preprocess_data(df_raw)
-        save_clean_data_to_db.submit(df_clean)
-        save_last_fetch_date_to_db.submit(date)
+    else:    
+        last_fetch_date = get_last_saved_date_from_db()
+
+        if last_fetch_date and date <= last_fetch_date:
+            print(f"Dane z dnia {date} są już zapisane w bazie danych. Pomijam pobieranie i przetwarzanie oraz pobieram dane z bazy.")
+            df_clean = get_clean_data_from_db()
+        else:
+            print(f"Pobieranie danych z dnia {date} ze źródła: {link}")
+            df_raw = fetch_data_from_source(link)
+            save_raw_data_to_db.submit(df_raw)
+            df_clean = clean_and_preprocess_data(df_raw)
+            save_clean_data_to_db.submit(df_clean)
+            save_last_fetch_date_to_db.submit(date)
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
