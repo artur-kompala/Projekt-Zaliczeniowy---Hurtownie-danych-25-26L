@@ -108,6 +108,11 @@ def _get_latest_registered_model_version(registry_name: str):
 
     return max(model_versions, key=lambda version: int(version.version))
 
+@app.get("/health")
+def health_check():
+    """Prosty endpoint do sprawdzenia, czy serwer działa."""
+    return {"status": "ok", "model_loaded": model is not None}
+
 @app.on_event("startup")
 def load_latest_model():
     """Uruchamia się przy starcie serwera, pobierając najnowszy model z MLflow."""

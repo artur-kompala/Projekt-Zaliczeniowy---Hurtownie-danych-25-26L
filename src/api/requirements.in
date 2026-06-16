@@ -1,3 +1,7 @@
 fastapi
 pydantic
 mlflow==3.13
+lightgbm
+rich
+graphviz
+psycopg2-binary

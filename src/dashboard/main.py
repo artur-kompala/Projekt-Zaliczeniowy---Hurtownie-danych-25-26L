@@ -8,7 +8,6 @@ from api_middleware import ApiMiddleware
 API_URL = os.getenv("API_URL", "http://localhost:2137")
 api: ApiMiddleware = ApiMiddleware(api_url=API_URL)
 
-DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "listings_full.csv"
 TARGET_COL = "price_quote_price_per_night"
 
 CATEGORICAL_COLS = [
@@ -35,36 +34,13 @@ NUMERIC_COLS = [
 
 @st.cache_data
 def load_and_prepare_data() -> pd.DataFrame:
-	if not DATA_PATH.exists():
-		raise FileNotFoundError(f"Dataset not found: {DATA_PATH}")
-
-	df = pd.read_csv(DATA_PATH)
-
-	df["bathrooms"] = pd.to_numeric(
-		df["bathrooms_text"].astype(str).str.extract(r"(\d+(?:\.\d+)?)", expand=False),
-		errors="coerce",
-	)
-
-	columns_to_keep = [
-		"id",
-		*NUMERIC_COLS,
-		*CATEGORICAL_COLS,
-		TARGET_COL,
-	]
-
-	df_clean = df[columns_to_keep].copy().set_index("id")
-	df_clean = df_clean.dropna(subset=[TARGET_COL])
-
-	for col in NUMERIC_COLS:
-		df_clean[col] = pd.to_numeric(df_clean[col], errors="coerce")
-		df_clean[col] = df_clean[col].fillna(df_clean[col].median())
-
-	for col in CATEGORICAL_COLS:
-		df_clean[col] = df_clean[col].fillna("Unknown").astype(str)
-
-	return df_clean
+	records = api.get_listings_data(limit=25).get("records", [])
+	return pd.DataFrame(records)
 
 def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
+	if not isinstance(df_clean, pd.DataFrame):
+		df_clean = pd.DataFrame(df_clean)
+
 	st.subheader("Dane wejściowe predykcji")
 
 	st.markdown("#### Parametry liczbowe")

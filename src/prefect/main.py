@@ -316,27 +316,15 @@ def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
     link, date = scrape_listings_url_and_date(INSIDE_AIRBNB_DATA_LANDING_PAGE)
     df_raw = fetch_data_from_source(link)
-    #save_raw_data_to_db.submit(df_raw)
+    save_raw_data_to_db.submit(df_raw)
     df_clean = clean_and_preprocess_data(df_raw)
-    #save_clean_data_to_db.submit(df_clean)
+    save_clean_data_to_db.submit(df_clean)
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
     model["valid_categorical_values"] = {col: df_clean[col].unique().tolist() for col in CATEGORICAL_COLS}
     save_model_to_mlflow(model)
     notify_model_update_webhook()
-
-
-@flow(name="Inside AirBnB New York Price Prediction Retraining Flow")
-def airbnb_new_york_price_prediction_retraining_flow():
-    """Przepływ Prefect do ponownego trenowania modelu predykcji cen w Airbnb w Nowym Jorku.
-    Bez etapów pobierania surowych danych i ich czyszczenia, zakładając, że dane są już
-    dostępne w bazie danych."""
-
-    df_clean = get_clean_data_from_db()
-    X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
-    model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
-    save_model_to_mlflow(model)
 
 
 print("Uruchamianie głównego przepływu Prefect do predykcji cen Airbnb w Nowym Jorku...")
