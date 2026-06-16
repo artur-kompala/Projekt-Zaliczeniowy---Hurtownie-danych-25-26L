@@ -67,130 +67,63 @@ def load_and_prepare_data() -> pd.DataFrame:
 def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
 	st.subheader("Dane wejściowe predykcji")
 
+	st.markdown("#### Parametry liczbowe")
+	n1, n2 = st.columns(2)
+	numeric_fields = [
+		("Minimum nights", "minimum_nights", 1, 365, int(df_clean["minimum_nights"].median()), 1),
+		("Accommodates", "accommodates", 1, 16, int(df_clean["accommodates"].median()), 1),
+		("Bathrooms", "bathrooms", 0.0, 10.0, float(df_clean["bathrooms"].median()), 0.5),
+		("Bedrooms", "bedrooms", 0, 20, int(df_clean["bedrooms"].median()), 1),
+		("Host listings count", "host_listings_count", 0, 100, int(df_clean["host_listings_count"].median()), 1),
+		("Maximum nights", "maximum_nights", 1, 365, int(df_clean["maximum_nights"].median()), 1),
+		("Availability 365", "availability_365", 0, 365, int(df_clean["availability_365"].median()), 1),
+		("Number of reviews", "number_of_reviews", 0, 1000, int(df_clean["number_of_reviews"].median()), 1),
+		("Number of reviews LTM", "number_of_reviews_ltm", 0, 1000, int(df_clean["number_of_reviews_ltm"].median()), 1),
+		("Review scores rating", "review_scores_rating", 0.0, 100.0, float(df_clean["review_scores_rating"].median()), 0.5),
+		("Reviews per month", "reviews_per_month", 0.0, 100.0, float(df_clean["reviews_per_month"].median()), 0.1),
+	]
+
+	numeric_values = {}
+	for index, (label, field_name, minimum_value, maximum_value, default_value, step_value) in enumerate(numeric_fields):
+		with n1 if index % 2 == 0 else n2:
+			numeric_values[field_name] = st.number_input(
+				label,
+				min_value=minimum_value,
+				max_value=maximum_value,
+				value=default_value,
+				step=step_value,
+				key=f"{key_prefix}_{field_name}",
+			)
+
+	st.markdown("#### Parametry kategoryczne")
+	categories = api.get_categories()
 	c1, c2 = st.columns(2)
-
 	with c1:
-		minimum_nights = st.number_input(
-			"Minimum nights",
-			min_value=1,
-			max_value=365,
-			value=int(df_clean["minimum_nights"].median()),
-			step=1,
-			key=f"{key_prefix}_minimum_nights",
+		room_type = st.selectbox(
+			"Room type",
+			options=categories["room_type"],
+			index=1,
+			key=f"{key_prefix}_room_type",
 		)
-		accommodates = st.number_input(
-			"Accommodates",
-			min_value=1,
-			max_value=16,
-			value=int(df_clean["accommodates"].median()),
-			step=1,
-			key=f"{key_prefix}_accommodates",
+		property_type = st.selectbox(
+			"Property type",
+			options=categories["property_type"],
+			index=0,
+			key=f"{key_prefix}_property_type",
 		)
-		bathrooms = st.number_input(
-			"Bathrooms",
-			min_value=0.0,
-			max_value=10.0,
-			value=float(df_clean["bathrooms"].median()),
-			step=0.5,
-			key=f"{key_prefix}_bathrooms",
-		)
-		bedrooms = st.number_input(
-			"Bedrooms",
-			min_value=0,
-			max_value=20,
-			value=int(df_clean["bedrooms"].median()),
-			step=1,
-			key=f"{key_prefix}_bedrooms",
-		)
-
-		host_listings_count = st.number_input(
-			"Host listings count",
-			min_value=0,
-			max_value=100,
-			value=int(df_clean["host_listings_count"].median()),
-			step=1,
-			key=f"{key_prefix}_host_listings_count",
-		)
-		maximum_nights = st.number_input(
-			"Maximum nights",
-			min_value=1,
-			max_value=365,
-			value=int(df_clean["maximum_nights"].median()),
-			step=1,
-			key=f"{key_prefix}_maximum_nights",
-		)
-		availability_365 = st.number_input(
-			"Availability 365",
-			min_value=0,
-			max_value=365,
-			value=int(df_clean["availability_365"].median()),
-			step=1,
-			key=f"{key_prefix}_availability_365",
-		)
-		number_of_reviews = st.number_input(
-			"Number of reviews",
-			min_value=0,
-			max_value=1000,
-			value=int(df_clean["number_of_reviews"].median()),
-			step=1,
-			key=f"{key_prefix}_number_of_reviews",
-		)
-		number_of_reviews_ltm = st.number_input(
-			"Number of reviews LTM",
-			min_value=0,
-			max_value=1000,
-			value=int(df_clean["number_of_reviews_ltm"].median()),
-			step=1,
-			key=f"{key_prefix}_number_of_reviews_ltm",
-		)
-		review_scores_rating = st.number_input(
-			"Review scores rating",
-			min_value=0.0,
-			max_value=100.0,
-			value=float(df_clean["review_scores_rating"].median()),
-			step=0.5,
-			key=f"{key_prefix}_review_scores_rating",
-		)
-		reviews_per_month = st.number_input(
-			"Reviews per month",
-			min_value=0.0,
-			max_value=100.0,
-			value=float(df_clean["reviews_per_month"].median()),
-			step=0.1,
-			key=f"{key_prefix}_reviews_per_month",
-		)
-
 	with c2:
-		categories = api.get_categories()
-		for key, value in categories.items():
-			if key == "room_type":
-				room_type = st.selectbox(
-					"Room type",
-					options=value,
-					index=1,
-					key=f"{key_prefix}_room_type",
-				)
-			elif key == "property_type":
-				property_type = st.selectbox(
-					"Property type",
-					options=value,
-					index=0,
-					key=f"{key_prefix}_property_type",
-				)
-			elif key == "neighbourhood_group_cleansed":
-				neighbourhood_group_cleansed = st.selectbox(
-					"Neighbourhood group",
-					options=value,
-					index=0,
-					key=f"{key_prefix}_neighbourhood_group_cleansed",
-				)
-			elif key == "neighbourhood_cleansed":
-				neighbourhood_cleansed = st.selectbox(
-					"Neighbourhood",
-					options=value,
-					index=0,
-					key=f"{key_prefix}_neighbourhood_cleansed",
-				)
+		neighbourhood_group_cleansed = st.selectbox(
+			"Neighbourhood group",
+			options=categories["neighbourhood_group_cleansed"],
+			index=0,
+			key=f"{key_prefix}_neighbourhood_group_cleansed",
+		)
+		neighbourhood_cleansed = st.selectbox(
+			"Neighbourhood",
+			options=categories["neighbourhood_cleansed"],
+			index=0,
+			key=f"{key_prefix}_neighbourhood_cleansed",
+		)
 
 	return {
 		"room_type" : room_type,
@@ -198,17 +131,17 @@ def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
 		"neighbourhood_group_cleansed" : neighbourhood_group_cleansed,
 		"neighbourhood_cleansed" : neighbourhood_cleansed,
 
-		"host_listings_count" : int(host_listings_count),
-		"accommodates" : int(accommodates),
-		"bathrooms" : float(bathrooms),
-		"bedrooms" : int(bedrooms),
-		"minimum_nights" : int(minimum_nights),
-		"maximum_nights" : int(maximum_nights),
-		"availability_365" : int(availability_365),
-		"number_of_reviews" : int(number_of_reviews),
-		"number_of_reviews_ltm" : int(number_of_reviews_ltm),
-		"review_scores_rating" : float(review_scores_rating),
-		"reviews_per_month" : float(reviews_per_month)
+		"host_listings_count" : int(numeric_values["host_listings_count"]),
+		"accommodates" : int(numeric_values["accommodates"]),
+		"bathrooms" : float(numeric_values["bathrooms"]),
+		"bedrooms" : int(numeric_values["bedrooms"]),
+		"minimum_nights" : int(numeric_values["minimum_nights"]),
+		"maximum_nights" : int(numeric_values["maximum_nights"]),
+		"availability_365" : int(numeric_values["availability_365"]),
+		"number_of_reviews" : int(numeric_values["number_of_reviews"]),
+		"number_of_reviews_ltm" : int(numeric_values["number_of_reviews_ltm"]),
+		"review_scores_rating" : float(numeric_values["review_scores_rating"]),
+		"reviews_per_month" : float(numeric_values["reviews_per_month"])
 	}
 
 
