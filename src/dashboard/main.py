@@ -64,7 +64,6 @@ def load_and_prepare_data() -> pd.DataFrame:
 
 	return df_clean
 
-
 def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
 	st.subheader("Dane wejściowe predykcji")
 
@@ -104,39 +103,112 @@ def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
 			key=f"{key_prefix}_bedrooms",
 		)
 
-	with c2:
-		beds = st.number_input(
-			"Beds",
+		host_listings_count = st.number_input(
+			"Host listings count",
 			min_value=0,
-			max_value=20,
-			value=2,
+			max_value=100,
+			value=int(df_clean["host_listings_count"].median()),
 			step=1,
-			key=f"{key_prefix}_beds",
+			key=f"{key_prefix}_host_listings_count",
 		)
-		room_type = st.selectbox(
-			"Room type",
-			options=["Entire home/apt", "Private room", "Shared room", "Hotel room"],
-			index=1,
-			key=f"{key_prefix}_room_type",
+		maximum_nights = st.number_input(
+			"Maximum nights",
+			min_value=1,
+			max_value=365,
+			value=int(df_clean["maximum_nights"].median()),
+			step=1,
+			key=f"{key_prefix}_maximum_nights",
 		)
+		availability_365 = st.number_input(
+			"Availability 365",
+			min_value=0,
+			max_value=365,
+			value=int(df_clean["availability_365"].median()),
+			step=1,
+			key=f"{key_prefix}_availability_365",
+		)
+		number_of_reviews = st.number_input(
+			"Number of reviews",
+			min_value=0,
+			max_value=1000,
+			value=int(df_clean["number_of_reviews"].median()),
+			step=1,
+			key=f"{key_prefix}_number_of_reviews",
+		)
+		number_of_reviews_ltm = st.number_input(
+			"Number of reviews LTM",
+			min_value=0,
+			max_value=1000,
+			value=int(df_clean["number_of_reviews_ltm"].median()),
+			step=1,
+			key=f"{key_prefix}_number_of_reviews_ltm",
+		)
+		review_scores_rating = st.number_input(
+			"Review scores rating",
+			min_value=0.0,
+			max_value=100.0,
+			value=float(df_clean["review_scores_rating"].median()),
+			step=0.5,
+			key=f"{key_prefix}_review_scores_rating",
+		)
+		reviews_per_month = st.number_input(
+			"Reviews per month",
+			min_value=0.0,
+			max_value=100.0,
+			value=float(df_clean["reviews_per_month"].median()),
+			step=0.1,
+			key=f"{key_prefix}_reviews_per_month",
+		)
+
+	with c2:
+		categories = api.get_categories()
+		for key, value in categories.items():
+			if key == "room_type":
+				room_type = st.selectbox(
+					"Room type",
+					options=value,
+					index=1,
+					key=f"{key_prefix}_room_type",
+				)
+			elif key == "property_type":
+				property_type = st.selectbox(
+					"Property type",
+					options=value,
+					index=0,
+					key=f"{key_prefix}_property_type",
+				)
+			elif key == "neighbourhood_group_cleansed":
+				neighbourhood_group_cleansed = st.selectbox(
+					"Neighbourhood group",
+					options=value,
+					index=0,
+					key=f"{key_prefix}_neighbourhood_group_cleansed",
+				)
+			elif key == "neighbourhood_cleansed":
+				neighbourhood_cleansed = st.selectbox(
+					"Neighbourhood",
+					options=value,
+					index=0,
+					key=f"{key_prefix}_neighbourhood_cleansed",
+				)
 
 	return {
-		"room_type" : str("Private room"),
-		"property_type" : str("Entire rental unit"),
-		"neighbourhood_group_cleansed" : str("Manhattan"),
-		"neighbourhood_cleansed" : str("Williamsburg"),
+		"room_type" : room_type,
+		"property_type" : property_type,
+		"neighbourhood_group_cleansed" : neighbourhood_group_cleansed,
+		"neighbourhood_cleansed" : neighbourhood_cleansed,
 
-		"host_listings_count" : int(1),
+		"host_listings_count" : int(host_listings_count),
 		"accommodates" : int(accommodates),
 		"bathrooms" : float(bathrooms),
 		"bedrooms" : int(bedrooms),
 		"minimum_nights" : int(minimum_nights),
-		"maximum_nights" : int(365),
-		"availability_365" : int(365),
-		"number_of_reviews" : int(0),
-		"number_of_reviews_ltm" : int(0),
-		"review_scores_rating" : float(0.0),
-		"reviews_per_month" : float(0.0)
+		"maximum_nights" : int(maximum_nights),
+		"availability_365" : int(availability_365),
+		"number_of_reviews" : int(number_of_reviews),
+		"number_of_reviews_ltm" : int(number_of_reviews_ltm),
+		"review_scores_rating" : float(review_scores_rating),
+		"reviews_per_month" : float(reviews_per_month)
 	}
 
 

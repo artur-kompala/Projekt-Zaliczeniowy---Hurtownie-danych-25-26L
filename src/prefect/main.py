@@ -1,3 +1,4 @@
+import json
 import os
 
 from oauthlib.uri_validate import query
@@ -238,17 +239,6 @@ def train_model(X_train, X_test, y_train, y_test, n_estimators=100, raw_feature_
         "r2": r2_score(y_test, y_pred),
     }
 
-    # feature_importance = (
-    #     pd.DataFrame(
-    #         {
-    #             "feature": raw_feature_columns,
-    #             "importance": pipeline.named_steps["model"].feature_importances_,
-    #         }
-    #     )
-    #     .sort_values("importance", ascending=False)
-    #     .reset_index(drop=True)
-    # )
-
     return {
         "model": pipeline,
         "model_columns": raw_feature_columns,
@@ -293,7 +283,18 @@ def save_model_to_mlflow(training_result):
     with mlflow.start_run() as run:
         mlflow.log_params(training_result["params"])
         mlflow.log_metrics(training_result["metrics"])
-        mlflow.log_input(training_result["dataset_metadata"], "dataset_metadata.json")
+
+        ohe = model.named_steps["preprocessor"].named_transformers_["ohe"]
+
+        with open("categorical_values.json", "w") as f:
+            json.dump({
+            feature: values.tolist()
+            for feature, values in zip(
+                CATEGORICAL_COLS,
+                ohe.categories_
+            )
+        }, f)
+        mlflow.log_artifact("categorical_values.json")
         mlflow.sklearn.log_model(model, "model")
         mlflow.register_model(f"runs:/{run.info.run_id}/model", "InsideAirbnbPricePredictionModel")
 
@@ -321,6 +322,7 @@ def airbnb_new_york_price_prediction_full_pipeline():
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
+    model["valid_categorical_values"] = {col: df_clean[col].unique().tolist() for col in CATEGORICAL_COLS}
     save_model_to_mlflow(model)
     notify_model_update_webhook()
 

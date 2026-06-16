@@ -1,8 +1,10 @@
+from cachetools.func import lru_cache
 import pandas as pd
 import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
+import json
 import mlflow
 import mlflow.sklearn
 from mlflow.tracking import MlflowClient
@@ -171,6 +173,19 @@ def get_listings_data(offset: int = Query(default=0, ge=0), limit: int = Query(d
         "limit": limit,
         "records": records,
     }
+    
+@lru_cache(maxsize=None)
+def get_categories(run_id):
+    path = mlflow.artifacts.download_artifacts(
+        artifact_uri=f"runs:/{run_id}/categorical_values.json"
+    )
+    with open(path) as f:
+        return json.load(f)
+
+@app.get("/valid_categorical_values")
+def get_valid_categorical_values():
+    """Endpoint do pobrania poprawnych wartości kategorycznych dla modelu."""
+    return get_categories(_get_latest_registered_model_version(REGISTRY_NAME).run_id)
 
 @app.get("/data/listings/geo")
 def get_geo_data():

@@ -1,3 +1,4 @@
+from cachetools.func import lru_cache
 import requests
 
 
@@ -74,3 +75,8 @@ class ApiMiddleware:
         """
         response = requests.post(f"{self.api_url}/predict", json=payload, timeout=20)
         return self._validate_json_response(response, "Nie udało się wykonać predykcji ceny!")
+    
+    @lru_cache(maxsize=1)
+    def get_categories(self) -> dict:
+        response = requests.get(f"{self.api_url}/valid_categorical_values", timeout=15)
+        return self._validate_json_response(response, "Nie udało się pobrać poprawnych wartości kategorycznych dla modelu!")
