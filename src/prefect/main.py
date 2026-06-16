@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import os
 
@@ -18,7 +19,7 @@ import re
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import mlflow
 from lightgbm import LGBMRegressor
 from sklearn.model_selection import train_test_split
@@ -40,6 +41,7 @@ DATABASE_URL = os.getenv(
 
 RAW_DATA_TABLE = os.getenv("RAW_DATA_TABLE", "raw_data")
 CLEAN_DATA_TABLE = os.getenv("CLEAN_DATA_TABLE", "clean_data")
+FETCH_METADATA_TABLE = os.getenv("FETCH_METADATA_TABLE", "fetch_metadata")
 
 TARGET_COL = "price_quote_price_per_night"
 
@@ -152,7 +154,7 @@ def scrape_listings_url_and_date(main_url: str) -> tuple[str, str]:
 
     found_url = match.group(1)
     ymd_date = match.group("ymd_date")
-    return found_url, ymd_date
+    return found_url, datetime.strptime(ymd_date, "%Y-%m-%d").date()
 
 @task
 def save_raw_data_to_db(df: pd.DataFrame):
@@ -311,14 +313,45 @@ def notify_model_update_webhook():
     except requests.RequestException as exc:
         print(f"Nie udało się powiadomić webhooka o aktualizacji modelu: {exc}")
 
+def get_last_saved_date_from_db() -> str | None:
+    """Funkcja do pobrania ostatniej zapisanej daty danych z bazy danych."""
+    with get_db_engine().connect() as connection:
+        result = connection.execute(text(f"SELECT date FROM {FETCH_METADATA_TABLE} WHERE id = 1"))
+        last_date = result.scalar()
+        return last_date
+
+
+@task
+def save_last_fetch_date_to_db(fetch_date: str) -> None:
+    """Zapisuje wyłącznie najnowszą datę pobrania w tabeli metadanych."""
+    with get_db_engine().begin() as connection:
+        connection.execute(
+            text(
+                f"""
+                INSERT INTO {FETCH_METADATA_TABLE} (id, date)
+                VALUES (1, :date)
+                ON CONFLICT (id) DO UPDATE SET date = EXCLUDED.date
+                """
+            ),
+            {"date": fetch_date},
+        )
+
 @flow(name="Inside AirBnB New York Price Prediction Flow")
 def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
     link, date = scrape_listings_url_and_date(INSIDE_AIRBNB_DATA_LANDING_PAGE)
-    df_raw = fetch_data_from_source(link)
-    save_raw_data_to_db.submit(df_raw)
-    df_clean = clean_and_preprocess_data(df_raw)
-    save_clean_data_to_db.submit(df_clean)
+    last_fetch_date = get_last_saved_date_from_db()
+
+    if last_fetch_date and date <= last_fetch_date:
+        print(f"Dane z dnia {date} są już zapisane w bazie danych. Pomijam pobieranie i przetwarzanie oraz pobieram dane z bazy.")
+        df_clean = get_clean_data_from_db()
+    else:
+        print(f"Pobieranie danych z dnia {date} ze źródła: {link}")
+        df_raw = fetch_data_from_source(link)
+        save_raw_data_to_db.submit(df_raw)
+        df_clean = clean_and_preprocess_data(df_raw)
+        save_clean_data_to_db.submit(df_clean)
+        save_last_fetch_date_to_db.submit(date)
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
