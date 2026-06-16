@@ -113,24 +113,6 @@ def build_prediction_payload(df_clean: pd.DataFrame, key_prefix: str) -> dict:
 			step=1,
 			key=f"{key_prefix}_beds",
 		)
-		latitude = st.number_input(
-			"Latitude",
-			min_value=40.0,
-			max_value=41.0,
-			value=40.7128,
-			step=0.0001,
-			format="%.4f",
-			key=f"{key_prefix}_latitude",
-		)
-		longitude = st.number_input(
-			"Longitude",
-			min_value=-75.0,
-			max_value=-73.0,
-			value=-74.0060,
-			step=0.0001,
-			format="%.4f",
-			key=f"{key_prefix}_longitude",
-		)
 		room_type = st.selectbox(
 			"Room type",
 			options=["Entire home/apt", "Private room", "Shared room", "Hotel room"],
