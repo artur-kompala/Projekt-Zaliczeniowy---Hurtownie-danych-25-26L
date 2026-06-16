@@ -22,6 +22,8 @@ from lightgbm import LGBMRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
 
+MODEL_UPDATE_WEBHOOK_URL = os.getenv("MODEL_UPDATE_WEBHOOK_URL", "http://localhost:2137/webhook/new-model-available")
+
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 INSIDE_AIRBNB_DATA_LANDING_PAGE = os.getenv("INSIDE_AIRBNB_DATA_LANDING_PAGE", "https://insideairbnb.com/get-the-data.html")
 POSTGRES_USER = os.getenv("POSTGRES_USER", os.getenv("DB_USER", "analytics_user"))
@@ -293,6 +295,19 @@ def save_model_to_mlflow(training_result):
         mlflow.sklearn.log_model(model, "model")
         mlflow.register_model(f"runs:/{run.info.run_id}/model", "InsideAirbnbPricePredictionModel")
 
+@task
+def notify_model_update_webhook():
+    """Zadanie do powiadamiania webhooka o aktualizacji modelu (np. do odświeżenia modelu w API)."""
+    if not MODEL_UPDATE_WEBHOOK_URL:
+        print("MODEL_UPDATE_WEBHOOK_URL nie jest ustawiony. Pomijam powiadomienie webhook.")
+        return
+
+    try:
+        response = requests.post(MODEL_UPDATE_WEBHOOK_URL, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"Nie udało się powiadomić webhooka o aktualizacji modelu: {exc}")
+
 @flow(name="Inside AirBnB New York Price Prediction Flow")
 def airbnb_new_york_price_prediction_full_pipeline():
     """Główny przepływ Prefect do automatyzacji procesu predykcji cen w Airbnb w Nowym Jorku."""
@@ -304,7 +319,9 @@ def airbnb_new_york_price_prediction_full_pipeline():
 
     X_train, X_test, y_train, y_test, raw_feature_columns, feature_name_map = split_data(df_clean)
     model = train_model(X_train, X_test, y_train, y_test, raw_feature_columns=raw_feature_columns, feature_name_map=feature_name_map)
-    save_model_to_mlflow.submit(model)
+    save_model_to_mlflow(model)
+    notify_model_update_webhook()
+
 
 @flow(name="Inside AirBnB New York Price Prediction Retraining Flow")
 def airbnb_new_york_price_prediction_retraining_flow():

@@ -199,6 +199,14 @@ def get_current_model_info():
         "end_time": str(latest_version.last_updated_timestamp),
     }
 
+@app.get("/webhook/new-model-available")
+def new_model_available_webhook():
+    """Webhook do ręcznego odświeżania modelu w pamięci RAM (np. po deployu nowej wersji)."""
+    if _try_load_latest_model(REGISTRY_NAME):
+        return {"message": "Model został odświeżony z rejestru."}
+    else:
+        raise HTTPException(status_code=500, detail="Nie udało się odświeżyć modelu z rejestru.")
+
 def main():
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=2137)
