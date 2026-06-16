@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+import math
 
 import pandas as pd
 import streamlit as st
@@ -128,34 +128,61 @@ def get_default_browse_columns() -> list[str]:
 def fetch_server_listings_for_limit() -> None:
 	try:
 		limit = int(st.session_state["server_limit"])
-		response = api.get_listings_data(limit=limit)
+		page = max(int(st.session_state.get("server_page", 1)), 1)
+		offset = (page - 1) * limit
+		response = api.get_listings_data(offset=offset, limit=limit)
 		records = response.get("records", [])
+		total_count = int(response.get("count", len(records)))
 		st.session_state["server_listings_df"] = pd.DataFrame(records)
+		st.session_state["server_total_count"] = total_count
 		st.session_state["server_listings_error"] = None
 	except Exception as exc:
 		st.session_state["server_listings_df"] = pd.DataFrame()
+		st.session_state["server_total_count"] = 0
 		st.session_state["server_listings_error"] = str(exc)
 
 
 def render_dataset_browser(df_clean: pd.DataFrame) -> None:
 	st.header("Przegląd danych")
-	st.caption("Przeglądaj dane pobrane z API. Pobranie następuje po puszczeniu suwaka.")
+	st.caption("Przeglądaj dane pobrane z API. Użyj paginacji, aby przechodzić po kolejnych stronach wyników.")
 
 	if "server_limit" not in st.session_state:
 		st.session_state["server_limit"] = 25
+	if "server_page" not in st.session_state:
+		st.session_state["server_page"] = 1
+	if "server_total_count" not in st.session_state:
+		st.session_state["server_total_count"] = 0
 
 	if "server_listings_df" not in st.session_state:
 		fetch_server_listings_for_limit()
 
-	st.slider(
-		"Liczba rekordów do pobrania z serwera",
-		min_value=1,
-		max_value=100,
-		value=int(st.session_state["server_limit"]),
-		step=1,
-		key="server_limit",
-		on_change=fetch_server_listings_for_limit,
-	)
+	limit = int(st.session_state["server_limit"])
+	total_count = int(st.session_state.get("server_total_count", 0))
+	current_page = max(int(st.session_state.get("server_page", 1)), 1)
+	if current_page != int(st.session_state.get("server_page", 1)):
+		st.session_state["server_page"] = current_page
+		fetch_server_listings_for_limit()
+
+	c1, c2 = st.columns([2, 1])
+	with c1:
+		st.slider(
+			"Liczba rekordów na stronę",
+			min_value=1,
+			max_value=100,
+			value=limit,
+			step=1,
+			key="server_limit",
+			on_change=fetch_server_listings_for_limit,
+		)
+	with c2:
+		st.number_input(
+			"Strona",
+			min_value=1,
+			value=current_page,
+			step=1,
+			key="server_page",
+			on_change=fetch_server_listings_for_limit,
+		)
 
 	server_error = st.session_state.get("server_listings_error")
 	if server_error:
@@ -165,6 +192,9 @@ def render_dataset_browser(df_clean: pd.DataFrame) -> None:
 	else:
 		server_df = st.session_state.get("server_listings_df", pd.DataFrame())
 		active_df = server_df if not server_df.empty else df_clean
+		start_row = (int(st.session_state.get("server_page", 1)) - 1) * int(st.session_state["server_limit"]) + 1
+		end_row = start_row + len(server_df) - 1 if not server_df.empty else start_row - 1
+		st.caption(f"Pokazano rekordy {start_row}-{end_row} z {int(st.session_state.get('server_total_count', len(server_df)))}")
 
 	all_columns = active_df.columns.tolist()
 	default_columns = [col for col in get_default_browse_columns() if col in all_columns]
@@ -178,7 +208,6 @@ def render_dataset_browser(df_clean: pd.DataFrame) -> None:
 		st.warning("Wybierz przynajmniej jedną kolumnę do przeglądania zbioru danych.")
 		return
 
-	max_rows = max(len(active_df), 1)
 	row_limit = 100
 
 	view_df = active_df[selected_columns]
